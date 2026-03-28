@@ -3,12 +3,18 @@ const userInput = document.getElementById("userInput");
 const chatWidget = document.getElementById("chatWidget");
 const quickReplies = document.getElementById("quickReplies");
 
+let faqData = [];
+
+// Load FAQ data
+fetch("faq_js_data.json")
+    .then(res => res.json())
+    .then(data => { faqData = data; })
+    .catch(() => { faqData = []; });
+
 // ------------------------------
 // LOAD PREVIOUS CHAT
 // ------------------------------
 window.onload = () => {
-    // Don't load previous chat - always start fresh
-    // Show only the initial welcome message
     chatBox.innerHTML = `
         <div class="message bot">
             Hello 👋 Welcome to Athenura Internship.
@@ -43,10 +49,36 @@ function toggleChat() {
 function selectQuickReply(text) {
     userInput.value = text;
     sendMessage();
-    quickReplies.style.display = "none";
+    if (quickReplies) quickReplies.style.display = "none";
 }
 
+// ------------------------------
+// TEXT SIMILARITY (Jaccard)
+// ------------------------------
+function preprocess(text) {
+    return text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+}
 
+function similarity(a, b) {
+    const wordsA = new Set(preprocess(a).split(/\s+/));
+    const wordsB = new Set(preprocess(b).split(/\s+/));
+    const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
+    const union = new Set([...wordsA, ...wordsB]).size;
+    return union === 0 ? 0 : intersection / union;
+}
+
+function findBestMatch(userMsg) {
+    let best = null;
+    let bestScore = 0;
+    for (const item of faqData) {
+        const score = similarity(userMsg, item.q);
+        if (score > bestScore) {
+            bestScore = score;
+            best = item;
+        }
+    }
+    return bestScore > 0.15 ? best : null;
+}
 
 // ------------------------------
 // SEND MESSAGE
@@ -58,27 +90,21 @@ function sendMessage() {
     addMessage(message, "user");
     userInput.value = "";
 
-    // Typing indicator
     const typing = addMessage("Typing...", "bot");
 
-    fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: message })
-    })
-    .then(res => {
-        if (!res.ok) throw new Error('Network response was not ok');
-        return res.json();
-    })
-    .then(data => {
+    setTimeout(() => {
         typing.remove();
-        addMessage(data.response, "bot");
-    })
-    .catch((error) => {
-        console.error('Error:', error);
-        typing.remove();
-        addMessage("Server error. Please try again.", "bot");
-    });
+        if (faqData.length === 0) {
+            addMessage("Sorry, FAQ data is still loading. Please try again.", "bot");
+            return;
+        }
+        const match = findBestMatch(message);
+        if (match) {
+            addMessage(match.a, "bot");
+        } else {
+            addMessage("Sorry, I couldn't find a relevant answer. Please try rephrasing your question.", "bot");
+        }
+    }, 400);
 }
 
 // ------------------------------
@@ -90,8 +116,5 @@ function addMessage(text, sender) {
     msg.innerText = text;
     chatBox.appendChild(msg);
     chatBox.scrollTop = chatBox.scrollHeight;
-
-    // Don't save to localStorage - keep chat fresh on reload
-
     return msg;
 }
