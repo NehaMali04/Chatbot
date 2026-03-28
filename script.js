@@ -14,7 +14,7 @@ window.onload = () => {
             Hello 👋 Welcome to Athenura Internship.
         </div>
         <div class="quick-suggestion">
-            <button class="suggestion-btn">Internship Info</button>
+            <button class="suggestion-btn" onclick="selectQuickReply('Internship Info')">Internship Info</button>
         </div>
     `;
 };
@@ -61,7 +61,7 @@ function sendMessage() {
     // Typing indicator
     const typing = addMessage("Typing...", "bot");
 
-    fetch("http://127.0.0.1:5000/chat", {
+    fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: message })
