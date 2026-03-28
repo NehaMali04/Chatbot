@@ -4,17 +4,23 @@ import os
 from http.server import BaseHTTPRequestHandler
 from difflib import SequenceMatcher
 
-# Load FAQ data from faq.json
-faq_data = []
+def load_faq():
+    # Try multiple path strategies for Vercel
+    base = os.path.dirname(__file__)
+    candidates = [
+        os.path.join(base, '..', 'faq.json'),
+        os.path.join(base, 'faq.json'),
+        '/var/task/faq.json',
+    ]
+    for path in candidates:
+        path = os.path.abspath(path)
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                raw = json.load(f)
+                return [{"question": item["question"].lower(), "answer": item["answer"]} for item in raw]
+    return []
 
-faq_path = os.path.join(os.path.dirname(__file__), '..', 'faq.json')
-with open(faq_path, 'r', encoding='utf-8') as f:
-    raw = json.load(f)
-    for item in raw:
-        faq_data.append({
-            "question": item["question"].lower(),
-            "answer": item["answer"]
-        })
+faq_data = load_faq()
 
 def preprocess(text):
     text = text.lower()
@@ -25,43 +31,49 @@ def find_best_match(user_question):
     user_q = preprocess(user_question)
     best_match = None
     best_score = 0
-
     for faq in faq_data:
         faq_q = preprocess(faq["question"])
         score = SequenceMatcher(None, user_q, faq_q).ratio()
-        user_words = set(user_q.split())
-        faq_words = set(faq_q.split())
-        common_words = user_words.intersection(faq_words)
+        common_words = set(user_q.split()).intersection(set(faq_q.split()))
         if common_words:
             score += len(common_words) * 0.1
         if score > best_score:
             best_score = score
             best_match = faq
-
     return best_match, best_score
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length)
-        data = json.loads(body)
-        user_message = data.get("message", "")
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            data = json.loads(body)
+            user_message = data.get("message", "")
 
-        if not user_message:
-            reply = "Please ask a question."
-        else:
-            best_match, score = find_best_match(user_message)
-            if best_match and score > 0.3:
-                reply = best_match["answer"]
+            if not user_message:
+                reply = "Please ask a question."
+            elif not faq_data:
+                reply = "FAQ data not loaded. Please contact support."
             else:
-                reply = "Sorry, I couldn't find a relevant answer. Please try rephrasing your question."
+                best_match, score = find_best_match(user_message)
+                if best_match and score > 0.3:
+                    reply = best_match["answer"]
+                else:
+                    reply = "Sorry, I couldn't find a relevant answer. Please try rephrasing your question."
 
-        response = json.dumps({"response": reply})
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        self.wfile.write(response.encode())
+            response = json.dumps({"response": reply})
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(response.encode())
+        except Exception as e:
+            error_resp = json.dumps({"response": f"Error: {str(e)}"})
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(error_resp.encode())
 
     def do_OPTIONS(self):
         self.send_response(200)
