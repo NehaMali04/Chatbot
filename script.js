@@ -4,12 +4,13 @@ const chatWidget = document.getElementById("chatWidget");
 const quickReplies = document.getElementById("quickReplies");
 
 let faqData = [];
+let dataLoaded = false;
 
 // Load FAQ data
 fetch("faq_js_data.json")
     .then(res => res.json())
-    .then(data => { faqData = data; })
-    .catch(() => { faqData = []; });
+    .then(data => { faqData = data; dataLoaded = true; })
+    .catch(() => { faqData = []; dataLoaded = true; });
 
 // ------------------------------
 // LOAD PREVIOUS CHAT
@@ -94,8 +95,12 @@ function sendMessage() {
 
     setTimeout(() => {
         typing.remove();
+        if (!dataLoaded) {
+            addMessage("Still loading, please wait a moment and try again.", "bot");
+            return;
+        }
         if (faqData.length === 0) {
-            addMessage("Sorry, FAQ data is still loading. Please try again.", "bot");
+            addMessage("Sorry, FAQ data could not be loaded.", "bot");
             return;
         }
         const match = findBestMatch(message);
