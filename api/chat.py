@@ -1,26 +1,16 @@
 import json
 import string
+import sys
 import os
 from http.server import BaseHTTPRequestHandler
 from difflib import SequenceMatcher
 
-def load_faq():
-    # Try multiple path strategies for Vercel
-    base = os.path.dirname(__file__)
-    candidates = [
-        os.path.join(base, '..', 'faq.json'),
-        os.path.join(base, 'faq.json'),
-        '/var/task/faq.json',
-    ]
-    for path in candidates:
-        path = os.path.abspath(path)
-        if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                raw = json.load(f)
-                return [{"question": item["question"].lower(), "answer": item["answer"]} for item in raw]
-    return []
+# Add parent directory to path so we can import faq_data_inline
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-faq_data = load_faq()
+from faq_data_inline import FAQ_DATA
+
+faq_data = [{"question": q.lower(), "answer": a} for q, a in FAQ_DATA]
 
 def preprocess(text):
     text = text.lower()
@@ -52,8 +42,6 @@ class handler(BaseHTTPRequestHandler):
 
             if not user_message:
                 reply = "Please ask a question."
-            elif not faq_data:
-                reply = "FAQ data not loaded. Please contact support."
             else:
                 best_match, score = find_best_match(user_message)
                 if best_match and score > 0.3:
